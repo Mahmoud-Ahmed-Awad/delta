@@ -5,22 +5,48 @@
     "plot": "a",
     "totalContract": 50000000000,
     "paid": 51000000000,
-    "phone": "01000000000",
+    "phone": "01272101350",
     "expenses": [
       {
         "reason": "abc",
         "amount": 1200,
         "date": "2025-11-11"
+      },
+      {
+        "reason": "طن حديد ",
+        "amount": 10000,
+        "date": "2026-03-12"
       }
     ],
-    "tips": [],
-    "docs": [],
+    "tips": [
+      {
+        "reason": "الجهاز(امضاء محضر  الاستلام)",
+        "payer": "دعاء ",
+        "amount": 200,
+        "date": "2026-03-03"
+      }
+    ],
+    "docs": [
+      {
+        "person": "محمود",
+        "name": "محضر الاستلام",
+        "purpose": "ختم ",
+        "place": "الجهاز",
+        "date": "2026-03-18"
+      }
+    ],
     "pdfs": [
       {
         "originalName": "in life.pdf",
         "filename": "1773756277928-41440457.pdf",
         "date": "2026-03-17",
         "path": "/files/1773756277928-41440457.pdf"
+      },
+      {
+        "originalName": "Walid Salah Ibrahim.pdf",
+        "filename": "1773771995062-177780539.pdf",
+        "date": "2026-03-17",
+        "path": "/files/1773771995062-177780539.pdf"
       }
     ]
   }

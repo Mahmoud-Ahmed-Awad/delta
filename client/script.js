@@ -98,14 +98,14 @@ function renderDashboard(query = "") {
     // تم إضافة تنسيقات UI الخاصة بالصور الدائرية والألوان لتتطابق مع التصميم الجميل
     tbody.innerHTML += `
       <tr class="hover:bg-gray-50 dark:hover:bg-slate-700 transition group">
-        <td class="font-bold flex items-center gap-3 rounded-r-2xl border-l-0 p-4">
+        <td class="border-x border-gray-100 dark:border-slate-700">
            ${c.name}
         </td>
         <td class="border-x border-gray-100 dark:border-slate-700">${c.plot}</td>
         <td class="text-red-600 font-black border-x border-gray-100 dark:border-slate-700">${owed.toLocaleString()} ج.م</td>
         <td dir="ltr" class="border-x border-gray-100 dark:border-slate-700 font-bold">${c.phone || "---"}</td>
-        <td class="rounded-l-2xl border-r-0">
-          <div class="flex gap-2 justify-end">
+        <td class="rounded-l-2xl border-r-0 ">
+          <div class="flex gap-2 justify-end w-fit">
             <button onclick="openClientPage('${c.id}')" class="bg-gray-100 dark:bg-slate-600 text-gray-700 dark:text-white px-4 py-2 rounded-lg font-bold hover:bg-[#2c3e50] hover:text-white transition">عرض</button>
             <button onclick="deleteClient('${c.id}')" class="bg-red-50 dark:bg-red-900/30 text-red-500 px-3 py-2 rounded-lg font-bold hover:bg-red-500 hover:text-white transition"><i class="fas fa-trash"></i></button>
           </div>
