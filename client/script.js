@@ -24,6 +24,7 @@ tailwind.config = {
 let clientsDB = [];
 let trashDB = [];
 let activeClient = null;
+let currentPDFAbortController = null;
 
 // Fetch data on page load
 async function loadDB() {
@@ -315,14 +316,21 @@ function previewUploadedPDF(url, title) {
 }
 
 async function openPDFPreview(title, dataOrUrl) {
+  // Cancel any existing loading task
+  if (currentPDFAbortController) {
+    currentPDFAbortController.abort();
+  }
+  currentPDFAbortController = new AbortController();
+  const signal = currentPDFAbortController.signal;
+
   document.getElementById("pdfPreviewTitle").innerText = title;
   const container = document.getElementById("pdfViewerContainer");
   
   // Show loading state
   container.innerHTML = `
-    <div id="pdf-loader" class="flex flex-col items-center justify-center text-white p-20">
-      <i class="fas fa-spinner fa-spin text-5xl mb-4 text-brand-gold"></i>
-      <p class="text-xl font-bold">جاري تحميل المعاينة...</p>
+    <div id="pdf-loader" class="flex flex-col items-center justify-center p-20">
+      <i class="fas fa-circle-notch fa-spin fa-3x text-blue-500 mb-4"></i>
+      <p class="text-gray-600 font-bold">جاري تحميل المعاينة...</p>
     </div>
   `;
   document.getElementById("pdfPreviewModal").classList.remove("hidden");
@@ -334,13 +342,14 @@ async function openPDFPreview(title, dataOrUrl) {
       // If we already have the data (for generated statements)
       arrayBuffer = dataOrUrl;
     } else {
-      // If it's a URL (for uploaded files), fetch via POST to bypass IDM
+      // If it's a URL/filename (for uploaded files), fetch via POST to bypass IDM
       console.log("Fetching PDF via POST JSON bypass:", dataOrUrl);
       
       const response = await fetch('/api/pdf-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: dataOrUrl })
+        body: JSON.stringify({ filename: dataOrUrl }),
+        signal: signal
       });
       
       const result = await response.json();
@@ -356,6 +365,7 @@ async function openPDFPreview(title, dataOrUrl) {
       arrayBuffer = bytes.buffer;
     }
 
+    if (signal.aborted) return;
     console.log("Received ArrayBuffer size:", arrayBuffer ? arrayBuffer.byteLength : "null", "bytes");
 
     if (!arrayBuffer || arrayBuffer.byteLength === 0) {
@@ -370,18 +380,21 @@ async function openPDFPreview(title, dataOrUrl) {
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdf = await loadingTask.promise;
     
+    if (signal.aborted) return;
     container.innerHTML = ""; // Clear loader
+    container.className = "flex-1 bg-slate-800 overflow-y-auto p-4 flex flex-col items-center gap-4";
 
     // Render pages
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      if (signal.aborted) return;
       const page = await pdf.getPage(pageNum);
       
       const viewport_orig = page.getViewport({ scale: 1.0 });
-      const scale = (container.clientWidth - 40) / viewport_orig.width;
+      const scale = (container.clientWidth - 80) / viewport_orig.width;
       const viewport = page.getViewport({ scale: Math.min(scale, 2.0) });
 
       const canvas = document.createElement('canvas');
-      canvas.className = "shadow-2xl mb-6 bg-white rounded-lg";
+      canvas.className = "shadow-2xl mb-8 mx-auto bg-white rounded-sm block";
       const context = canvas.getContext('2d');
       canvas.height = viewport.height;
       canvas.width = viewport.width;
@@ -391,19 +404,26 @@ async function openPDFPreview(title, dataOrUrl) {
         viewport: viewport
       }).promise;
       
-      container.appendChild(canvas);
+      if (!signal.aborted) {
+        container.appendChild(canvas);
+      }
     }
   } catch (err) {
+    if (err.name === 'AbortError') {
+      console.log("PDF loading aborted");
+      return;
+    }
     console.error("PDF Preview Error:", err);
+    const directUrl = typeof dataOrUrl === 'string' ? (dataOrUrl.startsWith('/') ? dataOrUrl : `/files/${dataOrUrl}`) : '#';
     container.innerHTML = `
-      <div class="flex flex-col items-center justify-center text-white p-10 text-center">
+      <div class="flex flex-col items-center justify-center p-10 text-center">
         <i class="fas fa-exclamation-triangle text-5xl mb-4 text-red-500"></i>
-        <h3 class="text-xl font-bold mb-4">تعذر عرض الملف</h3>
-        <p class="mb-2 text-red-400 font-mono text-xs">${err.message}</p>
-        <p class="mb-6 opacity-75">قد يكون هناك مشكلة في تحميل البيانات أو أن الملف تالف.</p>
+        <h3 class="text-xl font-bold mb-4 dark:text-white">تعذر عرض الملف</h3>
+        <p class="mb-2 text-red-500 font-mono text-sm">${err.message}</p>
+        <p class="mb-6 opacity-75 dark:text-gray-300">قد يكون هناك مشكلة في تحميل البيانات أو أن الملف تالف.</p>
         <div class="flex gap-4">
-          <a href="${typeof dataOrUrl === 'string' ? dataOrUrl : '#'}" target="_blank" class="bg-brand-gold text-white px-8 py-3 rounded-2xl font-bold ${typeof dataOrUrl !== 'string' ? 'hidden' : ''}">فتح الملف مباشرة</a>
-          <button onclick="closePDFPreview()" class="bg-white/10 text-white px-8 py-3 rounded-2xl font-bold">إغلاق</button>
+          <a href="${directUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold ${typeof dataOrUrl !== 'string' ? 'hidden' : ''}">فتح الملف مباشرة</a>
+          <button onclick="closePDFPreview()" class="bg-gray-200 dark:bg-gray-700 dark:text-white px-8 py-3 rounded-xl font-bold">إغلاق</button>
         </div>
       </div>
     `;
@@ -411,6 +431,10 @@ async function openPDFPreview(title, dataOrUrl) {
 }
 
 function closePDFPreview() {
+  if (currentPDFAbortController) {
+    currentPDFAbortController.abort();
+    currentPDFAbortController = null;
+  }
   document.getElementById("pdfPreviewModal").classList.add("hidden");
   document.getElementById("pdfViewerContainer").innerHTML = "";
 }
