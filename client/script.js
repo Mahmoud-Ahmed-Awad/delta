@@ -56,6 +56,69 @@ async function saveDB() {
 
 /**
  * ==========================================
+ * BACKUP & RESTORE
+ * ==========================================
+ */
+
+function downloadBackup() {
+  window.location.href = "/api/backup";
+}
+
+async function handleRestore(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  showConfirmModal(
+    "تأكيد استعادة البيانات",
+    "تحذير: استعادة النسخة الاحتياطية ستمسح جميع البيانات الحالية وتستبدلها ببيانات النسخة. هل أنت متأكد؟",
+    async () => {
+      const formData = new FormData();
+      formData.append("backup", file);
+
+      try {
+        const res = await fetch("/api/restore", {
+          method: "POST",
+          body: formData,
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          showConfirmModal(
+            "تم الاستعادة",
+            "تمت استعادة البيانات بنجاح! سيتم إعادة تحميل الصفحة الآن.",
+            () => window.location.reload(),
+            false,
+            "green"
+          );
+        } else {
+          showConfirmModal(
+            "فشل في الاستعادة",
+            "خطأ: " + (result.error || "فشل غير متوقع في معالجة الملف."),
+            () => {},
+            true,
+            "red"
+          );
+        }
+      } catch (err) {
+        console.error("Restore failed:", err);
+        showConfirmModal(
+          "خطأ في الاتصال",
+          "حدث خطأ أثناء محاولة الاتصال بالخادم لاستعادة البيانات.",
+          () => {},
+          true,
+          "red"
+        );
+      } finally {
+        input.value = "";
+      }
+    },
+    true,
+    "blue"
+  );
+}
+
+/**
+ * ==========================================
  * AUTHENTICATION
  * ==========================================
  */
@@ -899,15 +962,39 @@ function toggleNewClientModal() {
  * CUSTOM CONFIRM MODAL
  * ==========================================
  */
-function showConfirmModal(title, message, onConfirm) {
+function showConfirmModal(title, message, onConfirm, showCancel = true, type = "red") {
   document.getElementById("confirmTitle").innerText = title;
   document.getElementById("confirmMessage").innerText = message;
+  
+  const modalDiv = document.getElementById("confirmModal").firstElementChild;
+  const iconDiv = modalDiv.querySelector("div");
+  const confirmBtn = document.getElementById("confirmBtn");
+  const cancelBtn = confirmBtn.nextElementSibling;
+
+  // Apply visual theme based on type
+  if (type === "green") {
+    modalDiv.style.borderTopColor = "#22c55e"; // green-500
+    iconDiv.className = "w-20 h-20 bg-green-50 dark:bg-green-900/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl";
+    iconDiv.innerHTML = '<i class="fas fa-check-circle"></i>';
+    confirmBtn.className = "flex-1 bg-green-500 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-600 transition-all active:scale-95";
+  } else if (type === "blue") {
+    modalDiv.style.borderTopColor = "#3b82f6"; // blue-500
+    iconDiv.className = "w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl";
+    iconDiv.innerHTML = '<i class="fas fa-info-circle"></i>';
+    confirmBtn.className = "flex-1 bg-blue-500 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-blue-600 transition-all active:scale-95";
+  } else {
+    modalDiv.style.borderTopColor = "#ef4444"; // red-500
+    iconDiv.className = "w-20 h-20 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl";
+    iconDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+    confirmBtn.className = "flex-1 bg-red-500 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-red-600 transition-all active:scale-95";
+  }
+
+  cancelBtn.style.display = showCancel ? "block" : "none";
   document.getElementById("confirmModal").classList.remove("hidden");
 
-  // تصفية أي حدث قديم على الزر
-  const oldBtn = document.getElementById("confirmBtn");
-  const newBtn = oldBtn.cloneNode(true);
-  oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+  // Reset events
+  const newBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
 
   newBtn.addEventListener("click", () => {
     onConfirm();

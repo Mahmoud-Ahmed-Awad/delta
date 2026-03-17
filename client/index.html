@@ -118,6 +118,22 @@
               <i id="themeIcon" class="fas fa-moon"></i>
             </button>
             <button
+              onclick="downloadBackup()"
+              class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-6 py-4 rounded-2xl font-black flex items-center gap-3"
+              title="نسخة احتياطية"
+            >
+              <i class="fas fa-file-archive"></i> نسخة احتياطية
+            </button>
+            <button
+              onclick="document.getElementById('restoreInput').click()"
+              class="bg-green-50 dark:bg-green-900/30 text-green-600 px-6 py-4 rounded-2xl font-black flex items-center gap-3"
+              title="استعادة البيانات"
+            >
+              <i class="fas fa-file-import"></i> استعادة
+            </button>
+            <input type="file" id="restoreInput" class="hidden" accept=".zip" onchange="handleRestore(this)" />
+            
+            <button
               onclick="openTrashModal()"
               class="bg-red-50 dark:bg-red-900/30 text-red-500 px-6 py-4 rounded-2xl font-black flex items-center gap-3"
             >

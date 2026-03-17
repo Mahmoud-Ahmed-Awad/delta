@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
+const AdmZip = require("adm-zip");
 
 const app = express();
 
@@ -202,6 +203,94 @@ app.post("/api/permanent-delete-client", (req, res) => {
   } catch (error) {
     console.error("Error during permanent deletion:", error);
     res.status(500).json({ error: "Failed to permanently delete client" });
+  }
+});
+
+// API Endpoint: Create Backup (ZIP of data folder)
+app.get("/api/backup", (req, res) => {
+  try {
+    const zip = new AdmZip();
+    const dataFolder = path.join(__dirname, "data");
+
+    if (!fs.existsSync(dataFolder)) {
+      return res.status(404).json({ error: "Data folder not found" });
+    }
+
+    zip.addLocalFolder(dataFolder);
+    const buffer = zip.toBuffer();
+
+    const date = new Date().toISOString().split("T")[0];
+    const fileName = `delta_backup_${date}.zip`;
+
+    res.set({
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename=${fileName}`,
+      "Content-Length": buffer.length,
+    });
+
+    res.send(buffer);
+    console.log(`[Backup] Created backup: ${fileName} (${buffer.length} bytes)`);
+  } catch (error) {
+    console.error("Backup error:", error);
+    res.status(500).json({ error: "Failed to create backup" });
+  }
+});
+
+// Reuse multer for backup restoration
+const backupUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    if (path.extname(file.originalname).toLowerCase() === ".zip") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only ZIP files are allowed!"), false);
+    }
+  },
+});
+
+// API Endpoint: Restore Backup
+app.post("/api/restore", backupUpload.single("backup"), (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No backup file provided" });
+
+    const zip = new AdmZip(file.buffer);
+    const dataFolder = path.join(__dirname, "data");
+
+    // Safety check: ensure the ZIP contains a db folder or known files
+    const entries = zip.getEntries();
+    const hasDb = entries.some(e => e.entryName.includes("db/"));
+    if (!hasDb) {
+      return res.status(400).json({ error: "Invalid backup format. Missing 'db' directory." });
+    }
+
+    console.log("[Restore] Starting restoration...");
+
+    // Recursive function to clear directory
+    const clearDir = (dirPath) => {
+      if (fs.existsSync(dirPath)) {
+        fs.readdirSync(dirPath).forEach((file) => {
+          const curPath = path.join(dirPath, file);
+          if (fs.lstatSync(curPath).isDirectory()) {
+            clearDir(curPath);
+          } else {
+            fs.unlinkSync(curPath);
+          }
+        });
+        fs.rmdirSync(dirPath);
+      }
+    };
+
+    // Clear and restore
+    clearDir(dataFolder);
+    fs.mkdirSync(dataFolder, { recursive: true });
+    zip.extractAllTo(dataFolder, true);
+
+    console.log("[Restore] Restoration completed successfully.");
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Restore error:", error);
+    res.status(500).json({ error: "Failed to restore backup" });
   }
 });
 

@@ -12,6 +12,7 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "multer": "^2.1.1",
