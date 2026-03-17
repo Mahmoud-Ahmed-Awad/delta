@@ -200,12 +200,25 @@ function updateClientDOM() {
   document.getElementById("totalContractText").innerText =
     activeClient.totalContract.toLocaleString();
 
+  const payments = activeClient.payments || [];
+  const totalPaidFromHistory = payments.reduce(
+    (acc, p) => acc + parseFloat(p.amount),
+    0,
+  );
+
+  // Backward compatibility: use existing paid if no payments history exists
+  const effectivePaid =
+    payments.length > 0
+      ? totalPaidFromHistory + activeClient.paid
+      : activeClient.paid || 0;
+
   const expenses = activeClient.expenses.reduce(
     (acc, e) => acc + parseFloat(e.amount),
     0,
   );
+
   document.getElementById("paidAmountText").innerText = (
-    activeClient.paid - expenses
+    effectivePaid - expenses
   ).toLocaleString();
 
   const totalTips = activeClient.tips.reduce(
@@ -216,20 +229,36 @@ function updateClientDOM() {
     (acc, e) => acc + parseFloat(e.amount),
     0,
   );
-  const paid = activeClient.paid;
-  const tips = activeClient.tips.reduce(
-    (acc, e) => acc + parseFloat(e.amount),
-    0,
-  );
-  const owed = tips;
+
+  const owed = totalTips;
 
   document.getElementById("owedAmountText").innerText = owed.toLocaleString();
 
   // رندر الجداول
   renderClientExpenses();
   renderClientTips();
+  renderClientPayments(); // New: مدخلات المكتب
   renderClientDocuments();
   renderClientPDFs();
+}
+
+function renderClientPayments() {
+  const container = document.getElementById("newMoneyToOffice");
+  if (!container) return;
+
+  const payments = activeClient.payments || [];
+  container.innerHTML = payments.length
+    ? payments
+        .map(
+          (p) => `
+        <tr class="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition">
+          <td class="p-3 font-bold">${p.receiver || "---"}</td>
+          <td class="p-3 text-gray-500 text-xs">${p.date || "---"}</td>
+          <td class="p-3 text-green-600 font-bold">+${parseFloat(p.amount).toLocaleString()} ج.م</td>
+        </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="3" class="p-4 text-center text-gray-400">لا توجد مدفوعات مسجلة</td></tr>`;
 }
 
 function renderClientExpenses() {
@@ -341,7 +370,7 @@ async function openPDFPreview(title, dataOrUrl) {
 
   document.getElementById("pdfPreviewTitle").innerText = title;
   const container = document.getElementById("pdfViewerContainer");
-  
+
   // Show loading state
   container.innerHTML = `
     <div id="pdf-loader" class="flex flex-col items-center justify-center p-20">
@@ -360,16 +389,17 @@ async function openPDFPreview(title, dataOrUrl) {
     } else {
       // If it's a URL/filename (for uploaded files), fetch via POST to bypass IDM
       console.log("Fetching PDF via POST JSON bypass:", dataOrUrl);
-      
-      const response = await fetch('/api/pdf-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+
+      const response = await fetch("/api/pdf-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename: dataOrUrl }),
-        signal: signal
+        signal: signal,
       });
-      
+
       const result = await response.json();
-      if (!result.success) throw new Error(result.error || "Failed to fetch PDF data");
+      if (!result.success)
+        throw new Error(result.error || "Failed to fetch PDF data");
 
       // Convert base64 to ArrayBuffer
       const binaryString = window.atob(result.data);
@@ -382,55 +412,68 @@ async function openPDFPreview(title, dataOrUrl) {
     }
 
     if (signal.aborted) return;
-    console.log("Received ArrayBuffer size:", arrayBuffer ? arrayBuffer.byteLength : "null", "bytes");
+    console.log(
+      "Received ArrayBuffer size:",
+      arrayBuffer ? arrayBuffer.byteLength : "null",
+      "bytes",
+    );
 
     if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-      throw new Error(`The PDF file data is empty (0 bytes). View the console for response details.`);
+      throw new Error(
+        `The PDF file data is empty (0 bytes). View the console for response details.`,
+      );
     }
 
     // Initialize PDF.js
-    const pdfjsLib = window['pdfjs-dist/build/pdf'];
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdfjsLib = window["pdfjs-dist/build/pdf"];
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
     // Load the document
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdf = await loadingTask.promise;
-    
+
     if (signal.aborted) return;
     container.innerHTML = ""; // Clear loader
-    container.className = "flex-1 bg-slate-800 overflow-y-auto p-4 flex flex-col items-center gap-4";
+    container.className =
+      "flex-1 bg-slate-800 overflow-y-auto p-4 flex flex-col items-center gap-4";
 
     // Render pages
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       if (signal.aborted) return;
       const page = await pdf.getPage(pageNum);
-      
+
       const viewport_orig = page.getViewport({ scale: 1.0 });
       const scale = (container.clientWidth - 80) / viewport_orig.width;
       const viewport = page.getViewport({ scale: Math.min(scale, 2.0) });
 
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       canvas.className = "shadow-2xl mb-8 mx-auto bg-white rounded-sm block";
-      const context = canvas.getContext('2d');
+      const context = canvas.getContext("2d");
       canvas.height = viewport.height;
       canvas.width = viewport.width;
 
       await page.render({
         canvasContext: context,
-        viewport: viewport
+        viewport: viewport,
       }).promise;
-      
+
       if (!signal.aborted) {
         container.appendChild(canvas);
       }
     }
   } catch (err) {
-    if (err.name === 'AbortError') {
+    if (err.name === "AbortError") {
       console.log("PDF loading aborted");
       return;
     }
     console.error("PDF Preview Error:", err);
-    const directUrl = typeof dataOrUrl === 'string' ? (dataOrUrl.startsWith('/') ? dataOrUrl : `/files/${dataOrUrl}`) : '#';
+    const directUrl =
+      typeof dataOrUrl === "string"
+        ? dataOrUrl.startsWith("/")
+          ? dataOrUrl
+          : `/files/${dataOrUrl}`
+        : "#";
     container.innerHTML = `
       <div class="flex flex-col items-center justify-center p-10 text-center">
         <i class="fas fa-exclamation-triangle text-5xl mb-4 text-red-500"></i>
@@ -438,7 +481,7 @@ async function openPDFPreview(title, dataOrUrl) {
         <p class="mb-2 text-red-500 font-mono text-sm">${err.message}</p>
         <p class="mb-6 opacity-75 dark:text-gray-300">قد يكون هناك مشكلة في تحميل البيانات أو أن الملف تالف.</p>
         <div class="flex gap-4">
-          <a href="${directUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold ${typeof dataOrUrl !== 'string' ? 'hidden' : ''}">فتح الملف مباشرة</a>
+          <a href="${directUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold ${typeof dataOrUrl !== "string" ? "hidden" : ""}">فتح الملف مباشرة</a>
           <button onclick="closePDFPreview()" class="bg-gray-200 dark:bg-gray-700 dark:text-white px-8 py-3 rounded-xl font-bold">إغلاق</button>
         </div>
       </div>
@@ -457,10 +500,10 @@ function closePDFPreview() {
 
 async function previewStatementPDF() {
   if (!activeClient) return;
-  
+
   const { jsPDF } = window.jspdf;
   const element = document.getElementById("financials-capture-area");
-  
+
   // Open a loading state or just proceed
   const btn = event.currentTarget;
   const originalHtml = btn.innerHTML;
@@ -473,22 +516,23 @@ async function previewStatementPDF() {
       scale: 2,
       useCORS: true,
       logging: false,
-      backgroundColor: document.documentElement.classList.contains('dark') ? '#0f172a' : '#f8fafc'
+      backgroundColor: document.documentElement.classList.contains("dark")
+        ? "#0f172a"
+        : "#f8fafc",
     });
-    
+
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
-    
+
     // Calculate dimensions
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-    
+
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-    
+
     // Show in preview modal
     const pdfData = pdf.output("arraybuffer");
     openPDFPreview(`كشف حساب - ${activeClient.name}`, pdfData);
-    
   } catch (err) {
     console.error("PDF Generation Error:", err);
     alert("حدث خطأ أثناء إنشاء الملف");
@@ -497,7 +541,6 @@ async function previewStatementPDF() {
     btn.disabled = false;
   }
 }
-
 
 function downloadPDF(url, originalName) {
   const link = document.createElement("a");
@@ -633,6 +676,33 @@ function addDoc() {
     saveDB();
     updateClientDOM();
     closeModals();
+  }
+}
+
+function addNewMoney() {
+  const receiver = document.getElementById("in2").value;
+  const amount = parseFloat(document.getElementById("in3").value);
+  const date = document.getElementById("inNewMoneyDate").value;
+
+  if (receiver && amount) {
+    if (!activeClient.payments) activeClient.payments = [];
+    activeClient.payments.push({
+      id: Date.now().toString(),
+      receiver,
+      amount,
+      date,
+    });
+
+    // Update the flat "paid" for legacy support if needed,
+    // though updateClientDOM now prefers payments history.
+    // activeClient.paid = activeClient.payments.reduce(
+    //   (acc, p) => acc + parseFloat(p.amount),
+    //   0,
+    // );
+
+    saveDB();
+    updateClientDOM();
+    closeSubModal();
   }
 }
 
