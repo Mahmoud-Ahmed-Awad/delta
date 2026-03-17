@@ -171,10 +171,38 @@ function deleteClient(id) {
 
 function restoreClient(id) {
   const idx = trashDB.findIndex((c) => c.id === id);
-  clientsDB.push(trashDB.splice(idx, 1)[0]);
-  saveDB();
-  renderDashboard();
-  document.getElementById("trashModal").classList.add("hidden");
+  if (idx !== -1) {
+    clientsDB.push(trashDB.splice(idx, 1)[0]);
+    saveDB();
+    renderDashboard();
+    openTrashModal(); // Refresh list
+  }
+}
+
+async function permanentDeleteClient(id) {
+  showConfirmModal(
+    "حذف نهائي",
+    "تحذير: سيتم حذف هذا العميل وجميع ملفاته المرفقة نهائياً من النظام. هل أنت متأكد؟",
+    async () => {
+      try {
+        const res = await fetch("/api/permanent-delete-client", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId: id }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          // Update local state
+          trashDB = trashDB.filter((c) => c.id !== id);
+          openTrashModal();
+        } else {
+          alert("فشل الحذف: " + (data.error || "خطأ غير معروف"));
+        }
+      } catch (err) {
+        console.error("Permanent delete failed:", err);
+      }
+    },
+  );
 }
 
 /**
@@ -841,7 +869,10 @@ function openTrashModal() {
           (c) => `
         <div class="flex justify-between items-center bg-gray-50 dark:bg-slate-700 p-4 rounded-xl border border-gray-100 dark:border-slate-600 mb-3">
             <span class="font-bold dark:text-white">${c.name} - ${c.plot}</span>
-            <button onclick="restoreClient('${c.id}')" class="text-green-600 bg-green-50 px-4 py-2 rounded-lg font-bold hover:bg-green-500 hover:text-white transition">استعادة <i class="fas fa-rotate-left"></i></button>
+            <div class="flex gap-2">
+              <button onclick="restoreClient('${c.id}')" class="text-green-600 bg-green-50 dark:bg-green-900/20 px-4 py-2 rounded-lg font-bold hover:bg-green-500 hover:text-white transition">استعادة</button>
+              <button onclick="permanentDeleteClient('${c.id}')" class="text-red-600 bg-red-50 dark:bg-red-900/20 px-4 py-2 rounded-lg font-bold hover:bg-red-500 hover:text-white transition">حذف نهائي</button>
+            </div>
         </div>`,
         )
         .join("")

@@ -159,43 +159,49 @@ app.post("/api/upload-pdf", upload.single("pdf"), (req, res) => {
   }
 });
 
-// API Endpoint: Delete PDF
-app.delete("/api/delete-pdf", (req, res) => {
+// API Endpoint: Permanent Delete (from Trash)
+app.post("/api/permanent-delete-client", (req, res) => {
   try {
-    const { clientId, filename } = req.body;
+    const { clientId } = req.body;
+    if (!clientId) return res.status(400).json({ error: "Missing clientId" });
 
-    if (!clientId || !filename) {
-      return res.status(400).json({ error: "Missing clientId or filename" });
+    let clientsDB = fs.existsSync(dbPath) ? JSON.parse(fs.readFileSync(dbPath, "utf-8")) : [];
+    let trashDB = fs.existsSync(trashPath) ? JSON.parse(fs.readFileSync(trashPath, "utf-8")) : [];
+
+    const clientIdx = trashDB.findIndex((c) => c.id === clientId);
+    if (clientIdx === -1) {
+      return res.status(404).json({ error: "Client not found in trash" });
     }
 
-    const clientsDB = fs.existsSync(dbPath)
-      ? JSON.parse(fs.readFileSync(dbPath, "utf-8"))
-      : [];
-    const client = clientsDB.find((c) => c.id === clientId);
+    const client = trashDB[clientIdx];
 
-    if (!client || !client.pdfs) {
-      return res.status(404).json({ error: "Client or PDF list not found" });
+    // 1. Delete associated PDF files from disk
+    if (client.pdfs && Array.isArray(client.pdfs)) {
+      client.pdfs.forEach((pdf) => {
+        const filePath = path.join(__dirname, "data", "files", pdf.filename);
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+            console.log(`[Permanent Delete] Deleted file: ${pdf.filename}`);
+          } catch (err) {
+            console.error(`Failed to delete file ${pdf.filename}:`, err);
+          }
+        }
+      });
     }
 
-    const pdfIdx = client.pdfs.findIndex((p) => p.filename === filename);
-    if (pdfIdx === -1) {
-      return res.status(404).json({ error: "PDF entry not found in database" });
-    }
+    // 2. Remove client from trashDB
+    trashDB.splice(clientIdx, 1);
 
-    // Remove file from disk
-    const filePath = path.join(__dirname, "data", "files", filename);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    // Remove from DB
-    client.pdfs.splice(pdfIdx, 1);
+    // 3. Save updated databases
     fs.writeFileSync(dbPath, JSON.stringify(clientsDB, null, 2));
+    fs.writeFileSync(trashPath, JSON.stringify(trashDB, null, 2));
 
+    console.log(`[Permanent Delete] Client ${clientId} permanently removed.`);
     res.json({ success: true });
   } catch (error) {
-    console.error("Error deleting PDF:", error);
-    res.status(500).json({ error: "Failed to delete PDF" });
+    console.error("Error during permanent deletion:", error);
+    res.status(500).json({ error: "Failed to permanently delete client" });
   }
 });
 
