@@ -245,12 +245,28 @@ function renderClientExpenses() {
     .join("");
 }
 
+// دفع الاكراميات
 function renderClientTips() {
   document.getElementById("tipsTableBody").innerHTML = activeClient.tips
     .map(
       (t) => `
         <tr class="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition">
           <td class="p-3 font-bold">${t.reason}</td>
+          <td class="p-3 text-gray-500 dark:text-gray-400 text-xs">${t.payer}</td>
+          <td class="p-3 text-gray-500 text-xs">${t.date || "---"}</td>
+          <td class="p-3 text-orange-600 font-bold">+${t.amount} ج.م</td>
+        </tr>`,
+    )
+    .join("");
+}
+
+// يمكنك استخدام هذا الدالة إذا أردت عرض الإكراميات بشكل منفصل في مكان آخر بالصفحة، مثلاً في قسم "مدخلات العميل إلى المكتب"
+
+function renderClientNewMoneyToOffice() {
+  document.getElementById("newMoneyToOffice").innerHTML = activeClient.tips
+    .map(
+      (t) => `
+        <tr class="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition">
           <td class="p-3 text-gray-500 dark:text-gray-400 text-xs">${t.payer}</td>
           <td class="p-3 text-gray-500 text-xs">${t.date || "---"}</td>
           <td class="p-3 text-orange-600 font-bold">+${t.amount} ج.م</td>
@@ -575,6 +591,18 @@ function addExp() {
   }
 }
 
+function addNewMoney() {
+  const r = document.getElementById("in2").value;
+  const a = parseFloat(document.getElementById("in3").value);
+  const d = document.getElementById("inNewMoneyDate").value;
+  if (r && a) {
+    activeClient.expenses.push({ reason: r, amount: a, date: d });
+    saveDB();
+    updateClientDOM();
+    closeSubModal();
+  }
+}
+
 function addTip() {
   const r = document.getElementById("in1").value;
   const p = document.getElementById("in2").value;
@@ -682,7 +710,9 @@ function showSubModal(type) {
     `;
     document.getElementById("subModal").firstElementChild.className =
       "bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl w-96 text-right relative border-t-4 border-red-500";
-  } else if (type === "tip") {
+  }
+  // الاكراميات
+  else if (type === "tip") {
     div.innerHTML = `
       <h3 class="font-black text-2xl mb-6 dark:text-white text-center">إضافة إكرامية</h3>
       <div class="space-y-4 mb-6">
@@ -695,7 +725,23 @@ function showSubModal(type) {
     `;
     document.getElementById("subModal").firstElementChild.className =
       "bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl w-96 text-right relative border-t-4 border-orange-500";
-  } else if (type === "doc") {
+  }
+  // اضافه مبلغ جديد من العميل
+  else if (type === "newMoney") {
+    div.innerHTML = `
+      <h3 class="font-black text-2xl mb-6 dark:text-white text-center">إضافة مبلغ جديد</h3>
+      <div class="space-y-4 mb-6">
+        <input id="in2" class="w-full px-4 py-2 rounded-xl border-2 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 dark:text-white" placeholder="من استلم؟" />
+        <input id="in3" type="number" class="w-full px-4 py-2 rounded-xl border-2 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 dark:text-white" placeholder="المبلغ" />
+        <input id="inNewMoneyDate" type="date" class="w-full px-4 py-2 rounded-xl border-2 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 dark:text-white" />
+      </div>
+      <button onclick="addNewMoney()" class="w-full bg-orange-500 text-white py-3 rounded-xl font-black text-lg shadow-lg hover:bg-orange-600">تسجيل وحفظ</button>
+    `;
+    document.getElementById("subModal").firstElementChild.className =
+      "bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl w-96 text-right relative border-t-4 border-orange-500";
+  }
+  // حركة مستند
+  else if (type === "doc") {
     div.innerHTML = `
       <h3 class="font-black text-2xl mb-6 dark:text-white text-center">حركة مستند</h3>
       <div class="space-y-4 mb-6">
